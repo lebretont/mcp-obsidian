@@ -7,7 +7,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.29.8
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.61
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.78.2
+	github.com/giantswarm/mcp-oauth v0.18.6
 	github.com/modelcontextprotocol/go-sdk v1.6.1
+	golang.org/x/crypto v0.38.0
+	modernc.org/sqlite v1.36.0
 )
 
 require (

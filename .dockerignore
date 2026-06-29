@@ -2,6 +2,7 @@
 .agents
 .gocache
 .gopath
+.tmp
 .mcp-obsidian-sync
 tmp
 dist

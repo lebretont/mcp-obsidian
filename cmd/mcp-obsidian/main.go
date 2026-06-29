@@ -3,14 +3,18 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/dibou/mcp-obsidian/internal/config"
-	mcpserver "github.com/dibou/mcp-obsidian/internal/mcp"
+	"github.com/dibou/mcp-obsidian/internal/httpserver"
 	syncer "github.com/dibou/mcp-obsidian/internal/sync"
 	s3sync "github.com/dibou/mcp-obsidian/internal/sync/s3"
 	"github.com/dibou/mcp-obsidian/internal/vault"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const version = "0.1.0"
@@ -19,6 +23,7 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetFlags(log.LstdFlags | log.LUTC | log.Lmsgprefix)
 	log.SetPrefix("mcp-obsidian: ")
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -38,14 +43,31 @@ func main() {
 		}
 	}
 
-	server := mcp.NewServer(&mcp.Implementation{Name: "mcp-obsidian", Version: version}, nil)
-	mcpserver.Register(server, mcpserver.Dependencies{
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	srv, err := httpserver.New(ctx, httpserver.Dependencies{
 		Config: cfg,
 		Vault:  v,
 		Sync:   s,
+		Logger:  logger,
+		Version: version,
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Printf("HTTP shutdown failed: %v", err)
+		}
+	}()
+
+	logger.Info("listening", "addr", cfg.HTTP.Addr, "public_base_url", cfg.HTTP.PublicBaseURL)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
 }

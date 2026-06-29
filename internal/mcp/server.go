@@ -7,6 +7,7 @@ import (
 	"github.com/dibou/mcp-obsidian/internal/config"
 	syncapi "github.com/dibou/mcp-obsidian/internal/sync"
 	"github.com/dibou/mcp-obsidian/internal/vault"
+	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -55,6 +56,9 @@ type emptyParams struct{}
 
 func Register(server *mcpsdk.Server, deps Dependencies) {
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "list_notes", Description: "List Markdown notes in the Obsidian vault."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params listNotesParams) (*mcpsdk.CallToolResult, []vault.NoteInfo, error) {
+		if err := requireScope(ctx, "notes:read"); err != nil {
+			return nil, nil, err
+		}
 		if err := deps.Sync.EnsureFresh(ctx); err != nil {
 			return nil, nil, err
 		}
@@ -63,6 +67,9 @@ func Register(server *mcpsdk.Server, deps Dependencies) {
 	})
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "read_note", Description: "Read a Markdown note by relative path."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params readNoteParams) (*mcpsdk.CallToolResult, noteContent, error) {
+		if err := requireScope(ctx, "notes:read"); err != nil {
+			return nil, noteContent{}, err
+		}
 		if err := deps.Sync.EnsureFresh(ctx); err != nil {
 			return nil, noteContent{}, err
 		}
@@ -74,6 +81,9 @@ func Register(server *mcpsdk.Server, deps Dependencies) {
 	})
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "search_notes", Description: "Search Markdown notes with a simple line scan."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params searchNotesParams) (*mcpsdk.CallToolResult, []vault.SearchResult, error) {
+		if err := requireScope(ctx, "notes:read"); err != nil {
+			return nil, nil, err
+		}
 		if err := deps.Sync.EnsureFresh(ctx); err != nil {
 			return nil, nil, err
 		}
@@ -82,6 +92,9 @@ func Register(server *mcpsdk.Server, deps Dependencies) {
 	})
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "create_note", Description: "Create a new Markdown note; fails if it already exists."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params writeNoteParams) (*mcpsdk.CallToolResult, writeResult, error) {
+		if err := requireScope(ctx, "notes:write"); err != nil {
+			return nil, writeResult{}, err
+		}
 		if err := deps.Sync.EnsureFresh(ctx); err != nil {
 			return nil, writeResult{}, err
 		}
@@ -92,6 +105,9 @@ func Register(server *mcpsdk.Server, deps Dependencies) {
 	})
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "update_note", Description: "Replace a Markdown note's complete content atomically."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params writeNoteParams) (*mcpsdk.CallToolResult, writeResult, error) {
+		if err := requireScope(ctx, "notes:write"); err != nil {
+			return nil, writeResult{}, err
+		}
 		if err := deps.Sync.EnsureFresh(ctx); err != nil {
 			return nil, writeResult{}, err
 		}
@@ -102,6 +118,9 @@ func Register(server *mcpsdk.Server, deps Dependencies) {
 	})
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "append_note", Description: "Append content to an existing Markdown note atomically."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params writeNoteParams) (*mcpsdk.CallToolResult, writeResult, error) {
+		if err := requireScope(ctx, "notes:write"); err != nil {
+			return nil, writeResult{}, err
+		}
 		if err := deps.Sync.EnsureFresh(ctx); err != nil {
 			return nil, writeResult{}, err
 		}
@@ -112,6 +131,9 @@ func Register(server *mcpsdk.Server, deps Dependencies) {
 	})
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "delete_note", Description: "Delete a Markdown note when ALLOW_DELETE=true."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params pathParams) (*mcpsdk.CallToolResult, writeResult, error) {
+		if err := requireScope(ctx, "notes:delete"); err != nil {
+			return nil, writeResult{}, err
+		}
 		if err := deps.Sync.EnsureFresh(ctx); err != nil {
 			return nil, writeResult{}, err
 		}
@@ -122,11 +144,17 @@ func Register(server *mcpsdk.Server, deps Dependencies) {
 	})
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "sync_status", Description: "Return S3 sync status and last error."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, _ emptyParams) (*mcpsdk.CallToolResult, syncapi.Status, error) {
+		if err := requireScope(ctx, "notes:read"); err != nil {
+			return nil, syncapi.Status{}, err
+		}
 		status, err := deps.Sync.Status(ctx)
 		return nil, status, err
 	})
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "sync_now", Description: "Force a blocking S3 pull followed by a push."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, _ emptyParams) (*mcpsdk.CallToolResult, syncapi.Status, error) {
+		if err := requireScope(ctx, "sync:run"); err != nil {
+			return nil, syncapi.Status{}, err
+		}
 		if err := deps.Sync.Pull(ctx); err != nil {
 			return nil, syncapi.Status{}, err
 		}
@@ -143,4 +171,17 @@ func writeOutput(ctx context.Context, s syncapi.Syncer) writeResult {
 		return writeResult{OK: true, Warning: fmt.Sprintf("local write succeeded but S3 push failed: %v", err)}
 	}
 	return writeResult{OK: true}
+}
+
+func requireScope(ctx context.Context, scope string) error {
+	tokenInfo := mcpauth.TokenInfoFromContext(ctx)
+	if tokenInfo == nil {
+		return fmt.Errorf("unauthenticated")
+	}
+	for _, granted := range tokenInfo.Scopes {
+		if granted == scope {
+			return nil
+		}
+	}
+	return fmt.Errorf("insufficient scope: %s required", scope)
 }

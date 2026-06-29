@@ -3,6 +3,7 @@ package config
 import "testing"
 
 func TestLoadDefaults(t *testing.T) {
+	setRequiredOAuthEnv(t)
 	t.Setenv("OBSIDIAN_VAULT_PATH", "")
 	t.Setenv("S3_BUCKET", "")
 	cfg, err := Load()
@@ -18,9 +19,22 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.AllowDelete {
 		t.Fatal("delete should default to false")
 	}
+	if cfg.HTTP.Addr != ":8080" {
+		t.Fatalf("unexpected HTTP addr: %q", cfg.HTTP.Addr)
+	}
+	if cfg.HTTP.PublicBaseURL != "https://obsidian.example.com" {
+		t.Fatalf("unexpected public base URL: %q", cfg.HTTP.PublicBaseURL)
+	}
+	if cfg.OAuth.SQLitePath != "/data/oauth.db" {
+		t.Fatalf("unexpected OAuth SQLite path: %q", cfg.OAuth.SQLitePath)
+	}
+	if len(cfg.OAuth.GitHubAllowedUsers) != 1 || cfg.OAuth.GitHubAllowedUsers[0] != "dibou" {
+		t.Fatalf("unexpected allowed users: %#v", cfg.OAuth.GitHubAllowedUsers)
+	}
 }
 
 func TestS3ImplicitEnable(t *testing.T) {
+	setRequiredOAuthEnv(t)
 	t.Setenv("S3_BUCKET", "bucket")
 	t.Setenv("S3_PREFIX", "/vault/prefix/")
 	cfg, err := Load()
@@ -36,4 +50,29 @@ func TestS3ImplicitEnable(t *testing.T) {
 	if cfg.S3.DeleteRemote {
 		t.Fatal("remote deletes should be opt-in")
 	}
+}
+
+func TestLoadRequiresAllowedUsers(t *testing.T) {
+	t.Setenv("PUBLIC_BASE_URL", "https://obsidian.example.com")
+	t.Setenv("OAUTH_GITHUB_CLIENT_ID", "client")
+	t.Setenv("OAUTH_GITHUB_CLIENT_SECRET", "secret")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected missing allowed users to fail")
+	}
+}
+
+func TestLoadRejectsInsecurePublicURL(t *testing.T) {
+	setRequiredOAuthEnv(t)
+	t.Setenv("PUBLIC_BASE_URL", "http://obsidian.example.com")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected insecure PUBLIC_BASE_URL to fail")
+	}
+}
+
+func setRequiredOAuthEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("PUBLIC_BASE_URL", "https://obsidian.example.com/")
+	t.Setenv("OAUTH_GITHUB_CLIENT_ID", "client")
+	t.Setenv("OAUTH_GITHUB_CLIENT_SECRET", "secret")
+	t.Setenv("OAUTH_GITHUB_ALLOWED_USERS", "dibou")
 }
