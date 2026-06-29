@@ -41,15 +41,18 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		logger.Info("S3 sync enabled", "bucket", cfg.S3.Bucket, "prefix", cfg.S3.Prefix, "region", cfg.S3.Region, "interval", cfg.S3.SyncInterval.String())
+	} else {
+		logger.Info("S3 sync disabled")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	srv, err := httpserver.New(ctx, httpserver.Dependencies{
-		Config: cfg,
-		Vault:  v,
-		Sync:   s,
+		Config:  cfg,
+		Vault:   v,
+		Sync:    s,
 		Logger:  logger,
 		Version: version,
 	})

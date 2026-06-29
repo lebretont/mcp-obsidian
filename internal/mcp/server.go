@@ -88,7 +88,7 @@ func Register(server *mcpsdk.Server, deps Dependencies) {
 		return nil, noteContent{Path: params.Path, Content: content}, nil
 	})
 
-	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "search_notes", Description: "Search Markdown notes with a simple line scan."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params searchNotesParams) (*mcpsdk.CallToolResult, searchNotesResult, error) {
+	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "search_notes", Description: "Search Markdown notes by title/path and content."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params searchNotesParams) (*mcpsdk.CallToolResult, searchNotesResult, error) {
 		if err := requireScope(ctx, "notes:read"); err != nil {
 			return nil, searchNotesResult{}, err
 		}

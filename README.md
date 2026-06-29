@@ -58,7 +58,7 @@ The service expects TLS to be handled by your reverse proxy. Do not expose the c
 | `OAUTH_GITHUB_CLIENT_SECRET` | required | GitHub OAuth App client secret. |
 | `OAUTH_GITHUB_ALLOWED_USERS` | required | Comma-separated GitHub usernames allowed to access the MCP. |
 | `OAUTH_SQLITE_PATH` | `/data/oauth.db` | SQLite database used for OAuth clients, flows, tokens, and token metadata. |
-| `OAUTH_REGISTRATION_ACCESS_TOKEN` | | Bearer token required by `/oauth/register` when public client registration is disabled. |
+| `OAUTH_REGISTRATION_ACCESS_TOKEN` | | Bearer token required by `/oauth/register` when public client registration is disabled. This is useful only for clients that can send a registration bearer token. |
 | `OAUTH_ALLOW_PUBLIC_CLIENT_REGISTRATION` | `false` | Allows clients such as ChatGPT to call `/oauth/register` without a registration token. Enable only if you accept public dynamic client registration. |
 | `ALLOW_DELETE` | `false` | Enables `delete_note`. |
 

@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -72,6 +73,14 @@ func TestVaultOperationsAndSearch(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("expected 2 search results, got %d", len(results))
 	}
+	for _, result := range results {
+		if result.MatchType != "content" {
+			t.Fatalf("expected content match, got %q", result.MatchType)
+		}
+		if result.Score <= 0 {
+			t.Fatalf("expected positive search score, got %d", result.Score)
+		}
+	}
 
 	if err := svc.Append("folder/a.md", "again\n"); err != nil {
 		t.Fatal(err)
@@ -89,6 +98,69 @@ func TestVaultOperationsAndSearch(t *testing.T) {
 	}
 	if _, err := svc.Read("folder/b.md"); err == nil {
 		t.Fatal("expected deleted note to be unreadable")
+	}
+}
+
+func TestSearchMatchesFileTitleAndSimplePlural(t *testing.T) {
+	svc, err := New(t.TempDir(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Create("Recettes/Glaces.md", "# Desserts\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := svc.Search("recette de glace", "", false, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 search result, got %d: %#v", len(results), results)
+	}
+	result := results[0]
+	if result.Path != "Recettes/Glaces.md" {
+		t.Fatalf("expected Glaces.md result, got %q", result.Path)
+	}
+	if result.Line != 0 {
+		t.Fatalf("expected title match line 0, got %d", result.Line)
+	}
+	if result.MatchType != "title" {
+		t.Fatalf("expected title match, got %q", result.MatchType)
+	}
+
+	results, err = svc.Search("glace", "", true, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected case-sensitive search not to match Glaces.md, got %#v", results)
+	}
+}
+
+func TestSearchNoResultsReturnsEmptyJSONList(t *testing.T) {
+	svc, err := New(t.TempDir(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Create("note.md", "hello\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := svc.Search("missing", "", false, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results == nil {
+		t.Fatal("expected empty result slice, got nil")
+	}
+	data, err := json.Marshal(struct {
+		Results []SearchResult `json:"results"`
+	}{Results: results})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != `{"results":[]}` {
+		t.Fatalf("expected empty JSON list, got %s", data)
 	}
 }
 

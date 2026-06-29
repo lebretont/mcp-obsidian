@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/dibou/mcp-obsidian/internal/state"
@@ -30,9 +31,11 @@ type NoteInfo struct {
 }
 
 type SearchResult struct {
-	Path    string `json:"path"`
-	Line    int    `json:"line"`
-	Snippet string `json:"snippet"`
+	Path      string `json:"path"`
+	Line      int    `json:"line"`
+	Snippet   string `json:"snippet"`
+	MatchType string `json:"match_type"`
+	Score     int    `json:"score"`
 }
 
 func New(root string, allowDelete bool) (*Service, error) {
@@ -272,12 +275,22 @@ func (s *Service) Search(query, prefix string, caseSensitive bool, limit int) ([
 	if err != nil {
 		return nil, err
 	}
-	needle := query
-	if !caseSensitive {
-		needle = strings.ToLower(needle)
-	}
-	var results []SearchResult
+	needle := comparableText(query, caseSensitive)
+	queryTerms := searchTerms(query, caseSensitive)
+	results := make([]SearchResult, 0)
 	for _, note := range notes {
+		if score := pathMatchScore(note.Path, needle, queryTerms, caseSensitive); score > 0 {
+			results = append(results, SearchResult{
+				Path:      note.Path,
+				Line:      0,
+				Snippet:   note.Path,
+				MatchType: "title",
+				Score:     score,
+			})
+			if len(results) >= limit {
+				return results, nil
+			}
+		}
 		full, err := s.secureExistingPath(note.Path)
 		if err != nil {
 			return nil, err
@@ -292,12 +305,14 @@ func (s *Service) Search(query, prefix string, caseSensitive bool, limit int) ([
 		for scanner.Scan() {
 			lineNo++
 			line := scanner.Text()
-			haystack := line
-			if !caseSensitive {
-				haystack = strings.ToLower(haystack)
-			}
-			if strings.Contains(haystack, needle) {
-				results = append(results, SearchResult{Path: note.Path, Line: lineNo, Snippet: trimSnippet(line)})
+			if score := contentMatchScore(line, needle, queryTerms, caseSensitive); score > 0 {
+				results = append(results, SearchResult{
+					Path:      note.Path,
+					Line:      lineNo,
+					Snippet:   trimSnippet(line),
+					MatchType: "content",
+					Score:     score,
+				})
 				if len(results) >= limit {
 					_ = file.Close()
 					return results, nil
@@ -313,6 +328,69 @@ func (s *Service) Search(query, prefix string, caseSensitive bool, limit int) ([
 		}
 	}
 	return results, nil
+}
+
+func pathMatchScore(notePath, needle string, queryTerms []string, caseSensitive bool) int {
+	candidate := strings.TrimSuffix(notePath, path.Ext(notePath))
+	comparable := comparableText(candidate, caseSensitive)
+	if strings.Contains(comparable, needle) {
+		return 100
+	}
+	return termMatchScore(comparable, queryTerms, 80, caseSensitive)
+}
+
+func contentMatchScore(line, needle string, queryTerms []string, caseSensitive bool) int {
+	comparable := comparableText(line, caseSensitive)
+	if strings.Contains(comparable, needle) {
+		return 70
+	}
+	return termMatchScore(comparable, queryTerms, 50, caseSensitive)
+}
+
+func termMatchScore(candidate string, queryTerms []string, score int, caseSensitive bool) int {
+	if caseSensitive {
+		return 0
+	}
+	candidateTerms := searchTerms(candidate, caseSensitive)
+	for _, queryTerm := range queryTerms {
+		for _, candidateTerm := range candidateTerms {
+			if queryTerm == candidateTerm {
+				return score
+			}
+		}
+	}
+	return 0
+}
+
+func comparableText(input string, caseSensitive bool) string {
+	if caseSensitive {
+		return input
+	}
+	return strings.ToLower(input)
+}
+
+func searchTerms(input string, caseSensitive bool) []string {
+	if caseSensitive {
+		return nil
+	}
+	fields := strings.FieldsFunc(strings.ToLower(input), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	terms := make([]string, 0, len(fields))
+	for _, field := range fields {
+		term := singularizeSearchTerm(field)
+		if len(term) >= 3 {
+			terms = append(terms, term)
+		}
+	}
+	return terms
+}
+
+func singularizeSearchTerm(term string) string {
+	if len(term) > 3 && strings.HasSuffix(term, "s") {
+		return strings.TrimSuffix(term, "s")
+	}
+	return term
 }
 
 func atomicWrite(final string, data []byte, perm os.FileMode) error {
