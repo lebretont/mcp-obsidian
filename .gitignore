@@ -1,0 +1,8 @@
+bin/
+dist/
+tmp/
+*.exe
+.mcp-obsidian-sync/
+.gocache/
+.gopath/
+go.work
