@@ -24,10 +24,10 @@ import (
 )
 
 type Dependencies struct {
-	Config config.Config
-	Vault  *vault.Service
-	Sync   syncapi.Syncer
-	Logger *slog.Logger
+	Config  config.Config
+	Vault   *vault.Service
+	Sync    syncapi.Syncer
+	Logger  *slog.Logger
 	Version string
 }
 
@@ -118,15 +118,17 @@ func newGitHubProvider(cfg config.Config) (oauthproviders.Provider, error) {
 func oauthConfig(cfg config.Config) *oauth.ServerConfig {
 	resource := cfg.HTTP.PublicBaseURL + "/mcp"
 	return &oauth.ServerConfig{
-		Issuer:                 cfg.HTTP.PublicBaseURL,
-		AllowInsecureHTTP:      strings.HasPrefix(cfg.HTTP.PublicBaseURL, "http://localhost") || strings.HasPrefix(cfg.HTTP.PublicBaseURL, "http://127.0.0.1"),
-		SupportedScopes:        cfg.OAuth.Scopes,
-		DefaultChallengeScopes:  cfg.OAuth.Scopes,
-		ResourceIdentifier:     resource,
-		EnableRevocationEndpoint: true,
+		Issuer:                        cfg.HTTP.PublicBaseURL,
+		AllowInsecureHTTP:             strings.HasPrefix(cfg.HTTP.PublicBaseURL, "http://localhost") || strings.HasPrefix(cfg.HTTP.PublicBaseURL, "http://127.0.0.1"),
+		SupportedScopes:               cfg.OAuth.Scopes,
+		DefaultChallengeScopes:        cfg.OAuth.Scopes,
+		ResourceIdentifier:            resource,
+		RegistrationAccessToken:       cfg.OAuth.RegistrationAccessToken,
+		AllowPublicClientRegistration: cfg.OAuth.AllowPublicClientRegistration,
+		EnableRevocationEndpoint:      true,
 		ResourceMetadataByPath: map[string]oauthserver.ProtectedResourceConfig{
 			"/mcp": {
-				ScopesSupported:     cfg.OAuth.Scopes,
+				ScopesSupported:    cfg.OAuth.Scopes,
 				ResourceIdentifier: resource,
 			},
 		},

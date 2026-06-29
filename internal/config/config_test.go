@@ -28,8 +28,30 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.OAuth.SQLitePath != "/data/oauth.db" {
 		t.Fatalf("unexpected OAuth SQLite path: %q", cfg.OAuth.SQLitePath)
 	}
+	if cfg.OAuth.RegistrationAccessToken != "" {
+		t.Fatal("registration access token should default to empty")
+	}
+	if cfg.OAuth.AllowPublicClientRegistration {
+		t.Fatal("public client registration should default to false")
+	}
 	if len(cfg.OAuth.GitHubAllowedUsers) != 1 || cfg.OAuth.GitHubAllowedUsers[0] != "dibou" {
 		t.Fatalf("unexpected allowed users: %#v", cfg.OAuth.GitHubAllowedUsers)
+	}
+}
+
+func TestOAuthRegistrationConfig(t *testing.T) {
+	setRequiredOAuthEnv(t)
+	t.Setenv("OAUTH_REGISTRATION_ACCESS_TOKEN", "registration-secret")
+	t.Setenv("OAUTH_ALLOW_PUBLIC_CLIENT_REGISTRATION", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.OAuth.RegistrationAccessToken != "registration-secret" {
+		t.Fatalf("unexpected registration access token: %q", cfg.OAuth.RegistrationAccessToken)
+	}
+	if !cfg.OAuth.AllowPublicClientRegistration {
+		t.Fatal("expected public client registration to be enabled")
 	}
 }
 

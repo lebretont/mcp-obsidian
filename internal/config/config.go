@@ -23,11 +23,13 @@ type HTTPConfig struct {
 }
 
 type OAuthConfig struct {
-	GitHubClientID     string
-	GitHubClientSecret string
-	GitHubAllowedUsers []string
-	SQLitePath         string
-	Scopes             []string
+	GitHubClientID                string
+	GitHubClientSecret            string
+	GitHubAllowedUsers            []string
+	SQLitePath                    string
+	Scopes                        []string
+	RegistrationAccessToken       string
+	AllowPublicClientRegistration bool
 }
 
 type S3Config struct {
@@ -93,11 +95,13 @@ func Load() (Config, error) {
 			PublicBaseURL: publicBaseURL,
 		},
 		OAuth: OAuthConfig{
-			GitHubClientID:     githubClientID,
-			GitHubClientSecret: githubClientSecret,
-			GitHubAllowedUsers: allowedUsers,
-			SQLitePath:         getenv("OAUTH_SQLITE_PATH", "/data/oauth.db"),
-			Scopes:             []string{"notes:read", "notes:write", "notes:delete", "sync:run"},
+			GitHubClientID:                githubClientID,
+			GitHubClientSecret:            githubClientSecret,
+			GitHubAllowedUsers:            allowedUsers,
+			SQLitePath:                    getenv("OAUTH_SQLITE_PATH", "/data/oauth.db"),
+			Scopes:                        []string{"notes:read", "notes:write", "notes:delete", "sync:run"},
+			RegistrationAccessToken:       strings.TrimSpace(os.Getenv("OAUTH_REGISTRATION_ACCESS_TOKEN")),
+			AllowPublicClientRegistration: getenvBool("OAUTH_ALLOW_PUBLIC_CLIENT_REGISTRATION", false),
 		},
 		S3: S3Config{
 			Enabled:         s3Enabled,

@@ -1,6 +1,6 @@
 services:
   mcp-obsidian:
-    image: ghcr.io/lebretont/mcp-obsidian:sha-5520bd1
+    image: ghcr.io/lebretont/mcp-obsidian:latest
     restart: unless-stopped
     environment:
       MCP_HTTP_ADDR: ":8080"
@@ -9,6 +9,8 @@ services:
       OAUTH_GITHUB_CLIENT_SECRET: ${OAUTH_GITHUB_CLIENT_SECRET}
       OAUTH_GITHUB_ALLOWED_USERS: ${OAUTH_GITHUB_ALLOWED_USERS}
       OAUTH_SQLITE_PATH: /data/oauth.db
+      OAUTH_REGISTRATION_ACCESS_TOKEN: ${OAUTH_REGISTRATION_ACCESS_TOKEN:-}
+      OAUTH_ALLOW_PUBLIC_CLIENT_REGISTRATION: ${OAUTH_ALLOW_PUBLIC_CLIENT_REGISTRATION:-false}
       OBSIDIAN_VAULT_PATH: /vault
       ALLOW_DELETE: ${ALLOW_DELETE:-false}
       S3_ENABLED: ${S3_ENABLED:-false}

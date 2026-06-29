@@ -58,6 +58,8 @@ The service expects TLS to be handled by your reverse proxy. Do not expose the c
 | `OAUTH_GITHUB_CLIENT_SECRET` | required | GitHub OAuth App client secret. |
 | `OAUTH_GITHUB_ALLOWED_USERS` | required | Comma-separated GitHub usernames allowed to access the MCP. |
 | `OAUTH_SQLITE_PATH` | `/data/oauth.db` | SQLite database used for OAuth clients, flows, tokens, and token metadata. |
+| `OAUTH_REGISTRATION_ACCESS_TOKEN` | | Bearer token required by `/oauth/register` when public client registration is disabled. |
+| `OAUTH_ALLOW_PUBLIC_CLIENT_REGISTRATION` | `false` | Allows clients such as ChatGPT to call `/oauth/register` without a registration token. Enable only if you accept public dynamic client registration. |
 | `ALLOW_DELETE` | `false` | Enables `delete_note`. |
 
 GitHub OAuth App settings:
@@ -70,6 +72,8 @@ ChatGPT/OpenAI Apps SDK should be pointed at:
 ```text
 https://obsidian-mcp.example.com/mcp
 ```
+
+For ChatGPT client registration, either set `OAUTH_ALLOW_PUBLIC_CLIENT_REGISTRATION=true` so ChatGPT can obtain its own OAuth client ID from `/oauth/register`, or keep it `false` and provide `OAUTH_REGISTRATION_ACCESS_TOKEN` to trusted registration clients.
 
 ### Vault and S3
 
@@ -101,6 +105,7 @@ docker run --rm \
   -e OAUTH_GITHUB_CLIENT_ID=... \
   -e OAUTH_GITHUB_CLIENT_SECRET=... \
   -e OAUTH_GITHUB_ALLOWED_USERS=your-github-login \
+  -e OAUTH_ALLOW_PUBLIC_CLIENT_REGISTRATION=true \
   -e ALLOW_DELETE=false \
   -e S3_BUCKET=my-notes \
   -e AWS_REGION=eu-west-3 \
