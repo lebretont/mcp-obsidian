@@ -31,11 +31,19 @@ type noteContent struct {
 	Content string `json:"content"`
 }
 
+type listNotesResult struct {
+	Notes []vault.NoteInfo `json:"notes"`
+}
+
 type searchNotesParams struct {
 	Query         string `json:"query" jsonschema:"Text to search for."`
 	CaseSensitive bool   `json:"case_sensitive,omitempty"`
 	PathPrefix    string `json:"path_prefix,omitempty"`
 	Limit         int    `json:"limit,omitempty"`
+}
+
+type searchNotesResult struct {
+	Results []vault.SearchResult `json:"results"`
 }
 
 type writeNoteParams struct {
@@ -55,15 +63,15 @@ type writeResult struct {
 type emptyParams struct{}
 
 func Register(server *mcpsdk.Server, deps Dependencies) {
-	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "list_notes", Description: "List Markdown notes in the Obsidian vault."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params listNotesParams) (*mcpsdk.CallToolResult, []vault.NoteInfo, error) {
+	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "list_notes", Description: "List Markdown notes in the Obsidian vault."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params listNotesParams) (*mcpsdk.CallToolResult, listNotesResult, error) {
 		if err := requireScope(ctx, "notes:read"); err != nil {
-			return nil, nil, err
+			return nil, listNotesResult{}, err
 		}
 		if err := deps.Sync.EnsureFresh(ctx); err != nil {
-			return nil, nil, err
+			return nil, listNotesResult{}, err
 		}
 		notes, err := deps.Vault.List(params.PathPrefix, params.Limit)
-		return nil, notes, err
+		return nil, listNotesResult{Notes: notes}, err
 	})
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "read_note", Description: "Read a Markdown note by relative path."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params readNoteParams) (*mcpsdk.CallToolResult, noteContent, error) {
@@ -80,15 +88,15 @@ func Register(server *mcpsdk.Server, deps Dependencies) {
 		return nil, noteContent{Path: params.Path, Content: content}, nil
 	})
 
-	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "search_notes", Description: "Search Markdown notes with a simple line scan."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params searchNotesParams) (*mcpsdk.CallToolResult, []vault.SearchResult, error) {
+	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "search_notes", Description: "Search Markdown notes with a simple line scan."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params searchNotesParams) (*mcpsdk.CallToolResult, searchNotesResult, error) {
 		if err := requireScope(ctx, "notes:read"); err != nil {
-			return nil, nil, err
+			return nil, searchNotesResult{}, err
 		}
 		if err := deps.Sync.EnsureFresh(ctx); err != nil {
-			return nil, nil, err
+			return nil, searchNotesResult{}, err
 		}
 		results, err := deps.Vault.Search(params.Query, params.PathPrefix, params.CaseSensitive, params.Limit)
-		return nil, results, err
+		return nil, searchNotesResult{Results: results}, err
 	})
 
 	mcpsdk.AddTool(server, &mcpsdk.Tool{Name: "create_note", Description: "Create a new Markdown note; fails if it already exists."}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, params writeNoteParams) (*mcpsdk.CallToolResult, writeResult, error) {
