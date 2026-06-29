@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -67,7 +66,7 @@ func (s *Syncer) EnsureFresh(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if empty || s.cfg.SyncInterval == 0 || st.LastPull.IsZero() || time.Since(st.LastPull) > s.cfg.SyncInterval {
+	if empty || s.cfg.SyncInterval == 0 || (!st.LastPull.IsZero() && time.Since(st.LastPull) > s.cfg.SyncInterval) {
 		return s.pullLocked(ctx, st)
 	}
 	return nil
@@ -115,9 +114,12 @@ func (s *Syncer) pullLocked(ctx context.Context, st state.Status) error {
 	for rel, obj := range remote {
 		localPath := filepath.Join(s.vault.Root(), filepath.FromSlash(rel))
 		localInfo, statErr := os.Stat(localPath)
-		entry := next.Entries[rel]
+		entry, tracked := next.Entries[rel]
 		needsDownload := errors.Is(statErr, os.ErrNotExist)
 		if statErr == nil {
+			if !tracked {
+				continue
+			}
 			localUnchanged := localInfo.Size() == entry.LocalSize && localInfo.ModTime().UTC().Equal(entry.LocalModTime)
 			remoteChanged := obj.ETag != entry.ETag || obj.Size != entry.Size || !sameTime(obj.LastModified, entry.LastModified)
 			needsDownload = localUnchanged && remoteChanged
@@ -126,7 +128,7 @@ func (s *Syncer) pullLocked(ctx context.Context, st state.Status) error {
 			return statErr
 		}
 		if needsDownload {
-			if err := s.download(ctx, rel, localPath); err != nil {
+			if err := s.download(ctx, rel); err != nil {
 				s.store.MarkError(err)
 				return err
 			}
@@ -244,7 +246,7 @@ func (s *Syncer) listRemote(ctx context.Context) (map[string]state.FileEntry, er
 		}
 		for _, obj := range page.Contents {
 			key := aws.ToString(obj.Key)
-			rel := strings.TrimPrefix(key, s.cfg.Prefix)
+			rel := s.relFromKey(key)
 			if rel == "" || !strings.HasSuffix(strings.ToLower(rel), ".md") {
 				continue
 			}
@@ -279,7 +281,7 @@ func (s *Syncer) localMarkdown() (map[string]os.FileInfo, error) {
 	return result, nil
 }
 
-func (s *Syncer) download(ctx context.Context, rel, localPath string) error {
+func (s *Syncer) download(ctx context.Context, rel string) error {
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.cfg.Bucket),
 		Key:    aws.String(s.key(rel)),
@@ -288,7 +290,7 @@ func (s *Syncer) download(ctx context.Context, rel, localPath string) error {
 		return err
 	}
 	defer out.Body.Close()
-	return vault.CopyFile(localPath, out.Body, 0o644)
+	return s.vault.CopyNote(rel, out.Body)
 }
 
 func (s *Syncer) upload(ctx context.Context, rel string) error {
@@ -336,7 +338,17 @@ func (s *Syncer) deleteRemote(ctx context.Context, rel string) error {
 }
 
 func (s *Syncer) key(rel string) string {
-	return path.Join(strings.TrimSuffix(s.cfg.Prefix, "/"), rel)
+	if s.cfg.Prefix == "" {
+		return rel
+	}
+	return s.cfg.Prefix + rel
+}
+
+func (s *Syncer) relFromKey(key string) string {
+	if s.cfg.Prefix == "" {
+		return key
+	}
+	return strings.TrimPrefix(key, s.cfg.Prefix)
 }
 
 func sameTime(a, b time.Time) bool {

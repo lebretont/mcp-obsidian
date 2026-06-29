@@ -61,7 +61,7 @@ func Load() (Config, error) {
 			SecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
 			SessionToken:    os.Getenv("AWS_SESSION_TOKEN"),
 			SyncInterval:    time.Duration(intervalMinutes) * time.Minute,
-			DeleteRemote:    getenvBool("S3_SYNC_DELETE", true),
+			DeleteRemote:    getenvBool("S3_SYNC_DELETE", false),
 		},
 	}
 	if cfg.S3.Enabled && cfg.S3.Bucket == "" {

@@ -104,3 +104,24 @@ func TestDeleteDisabled(t *testing.T) {
 		t.Fatal("expected delete to be disabled")
 	}
 }
+
+func TestRejectsSymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	svc, err := New(root, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "linked")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := svc.Create("linked/escape.md", "nope"); err == nil {
+		t.Fatal("expected symlink escape write to be rejected")
+	}
+	if err := os.WriteFile(filepath.Join(outside, "escape.md"), []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Read("linked/escape.md"); err == nil {
+		t.Fatal("expected symlink escape read to be rejected")
+	}
+}

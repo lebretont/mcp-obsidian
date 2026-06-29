@@ -33,4 +33,7 @@ func TestS3ImplicitEnable(t *testing.T) {
 	if cfg.S3.Prefix != "vault/prefix/" {
 		t.Fatalf("unexpected prefix: %q", cfg.S3.Prefix)
 	}
+	if cfg.S3.DeleteRemote {
+		t.Fatal("remote deletes should be opt-in")
+	}
 }

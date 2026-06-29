@@ -115,6 +115,38 @@ func (s *Service) fullPath(rel string) string {
 	return filepath.Join(s.root, filepath.FromSlash(rel))
 }
 
+func (s *Service) secureExistingPath(rel string) (string, error) {
+	full := s.fullPath(rel)
+	resolved, err := filepath.EvalSymlinks(full)
+	if err != nil {
+		return "", err
+	}
+	if !s.isInsideRoot(resolved) {
+		return "", ErrInvalidPath
+	}
+	return resolved, nil
+}
+
+func (s *Service) secureWritePath(rel string) (string, error) {
+	full := s.fullPath(rel)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		return "", err
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(full))
+	if err != nil {
+		return "", err
+	}
+	if !s.isInsideRoot(parent) {
+		return "", ErrInvalidPath
+	}
+	return filepath.Join(parent, filepath.Base(full)), nil
+}
+
+func (s *Service) isInsideRoot(candidate string) bool {
+	rel, err := filepath.Rel(s.root, candidate)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
 func (s *Service) List(prefix string, limit int) ([]NoteInfo, error) {
 	cleanPrefix, err := ValidatePathPrefix(prefix)
 	if err != nil {
@@ -164,7 +196,11 @@ func (s *Service) Read(rel string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data, err := os.ReadFile(s.fullPath(clean))
+	full, err := s.secureExistingPath(clean)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(full)
 	if err != nil {
 		return "", err
 	}
@@ -176,7 +212,10 @@ func (s *Service) Create(rel, content string) error {
 	if err != nil {
 		return err
 	}
-	final := s.fullPath(clean)
+	final, err := s.secureWritePath(clean)
+	if err != nil {
+		return err
+	}
 	if _, err := os.Stat(final); err == nil {
 		return fmt.Errorf("note already exists: %s", clean)
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -190,7 +229,11 @@ func (s *Service) Update(rel, content string) error {
 	if err != nil {
 		return err
 	}
-	return atomicWrite(s.fullPath(clean), []byte(content), 0o644)
+	final, err := s.secureWritePath(clean)
+	if err != nil {
+		return err
+	}
+	return atomicWrite(final, []byte(content), 0o644)
 }
 
 func (s *Service) Append(rel, content string) error {
@@ -210,6 +253,9 @@ func (s *Service) Delete(rel string) error {
 	}
 	clean, err := ValidateNotePath(rel)
 	if err != nil {
+		return err
+	}
+	if _, err := s.secureExistingPath(clean); err != nil {
 		return err
 	}
 	return os.Remove(s.fullPath(clean))
@@ -232,7 +278,11 @@ func (s *Service) Search(query, prefix string, caseSensitive bool, limit int) ([
 	}
 	var results []SearchResult
 	for _, note := range notes {
-		file, err := os.Open(s.fullPath(note.Path))
+		full, err := s.secureExistingPath(note.Path)
+		if err != nil {
+			return nil, err
+		}
+		file, err := os.Open(full)
 		if err != nil {
 			return nil, err
 		}
@@ -326,4 +376,16 @@ func CopyFile(dst string, src io.Reader, perm os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmpName, dst)
+}
+
+func (s *Service) CopyNote(rel string, src io.Reader) error {
+	clean, err := ValidateNotePath(rel)
+	if err != nil {
+		return err
+	}
+	final, err := s.secureWritePath(clean)
+	if err != nil {
+		return err
+	}
+	return CopyFile(final, src, 0o644)
 }
