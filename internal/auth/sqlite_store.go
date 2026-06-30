@@ -229,6 +229,7 @@ func (s *SQLiteStore) AtomicGetAndDeleteRefreshToken(ctx context.Context, refres
 	if err != nil {
 		return "", "", nil, err
 	}
+	providerToken = githubRefreshCompatibleStoredToken(providerToken)
 
 	clientID := ""
 	if meta, err := s.getTokenMetadataTx(ctx, tx, refreshToken); err == nil && meta != nil {
@@ -244,6 +245,15 @@ func (s *SQLiteStore) AtomicGetAndDeleteRefreshToken(ctx context.Context, refres
 		return "", "", nil, err
 	}
 	return userID, clientID, providerToken, nil
+}
+
+func githubRefreshCompatibleStoredToken(token *oauth2.Token) *oauth2.Token {
+	if token == nil || token.RefreshToken != "" || token.AccessToken == "" {
+		return token
+	}
+	cloned := *token
+	cloned.RefreshToken = token.AccessToken
+	return &cloned
 }
 
 func (s *SQLiteStore) SaveClient(ctx context.Context, client *oauthstorage.Client) error {

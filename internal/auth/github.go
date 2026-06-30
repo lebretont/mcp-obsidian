@@ -47,7 +47,11 @@ func (p *GitHubAllowlistProvider) AuthorizationURL(state, codeChallenge, codeCha
 }
 
 func (p *GitHubAllowlistProvider) ExchangeCode(ctx context.Context, code, codeVerifier string) (*oauth2.Token, error) {
-	return p.base.ExchangeCode(ctx, code, codeVerifier)
+	token, err := p.base.ExchangeCode(ctx, code, codeVerifier)
+	if err != nil {
+		return nil, err
+	}
+	return p.githubRefreshCompatibleToken(token), nil
 }
 
 func (p *GitHubAllowlistProvider) ValidateToken(ctx context.Context, accessToken string) (*oauthproviders.UserInfo, error) {
@@ -66,7 +70,16 @@ func (p *GitHubAllowlistProvider) ValidateToken(ctx context.Context, accessToken
 }
 
 func (p *GitHubAllowlistProvider) RefreshToken(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
-	return p.base.RefreshToken(ctx, refreshToken)
+	if refreshToken == "" {
+		return nil, fmt.Errorf("github access token is required for refresh")
+	}
+	if _, err := p.ValidateToken(ctx, refreshToken); err != nil {
+		return nil, err
+	}
+	return p.githubRefreshCompatibleToken(&oauth2.Token{
+		AccessToken: refreshToken,
+		TokenType:   "Bearer",
+	}), nil
 }
 
 func (p *GitHubAllowlistProvider) RevokeToken(ctx context.Context, token string) error {
@@ -75,6 +88,15 @@ func (p *GitHubAllowlistProvider) RevokeToken(ctx context.Context, token string)
 
 func (p *GitHubAllowlistProvider) HealthCheck(ctx context.Context) error {
 	return p.base.HealthCheck(ctx)
+}
+
+func (p *GitHubAllowlistProvider) githubRefreshCompatibleToken(token *oauth2.Token) *oauth2.Token {
+	if token == nil || token.RefreshToken != "" || token.AccessToken == "" {
+		return token
+	}
+	cloned := *token
+	cloned.RefreshToken = token.AccessToken
+	return &cloned
 }
 
 func (p *GitHubAllowlistProvider) fetchLogin(ctx context.Context, accessToken string) (string, error) {
